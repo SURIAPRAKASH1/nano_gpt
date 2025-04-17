@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from dataclasses import dataclass
-from base import Block
+from base import Block, DyT
 
 @dataclass
 class GPTConfig:
@@ -32,8 +32,10 @@ class GPT(nn.Module):
           pte = nn.Embedding(config.block_size, config.n_embd),
           h = nn.ModuleList([Block(config) for _ in range(config.n_layers)]) ,
           fcl = nn.Linear(config.n_embd, config.n_embd)
+          dyt = DyT(GPTConfig)
         ))
         
+
         # finall prediction layer
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
 
@@ -46,11 +48,13 @@ class GPT(nn.Module):
         # token embeddings and positional embedding for given ids (just n dim learnable vector)
         wte = self.transformer.wte(ids)             # (b, t, n_embd)
         pte  = self.transformer.pte(pos)            # (t, n_embd)
-        x = wte + pte    
+        
+        # normalization before feeding to transfomer
+        x = self.transformer.dyt( wte + pte )
         for block in self.transformer.h:
             x = block(x) 
-        # finnal projection
-        x = self.transformer.fcl(x)
+        # finnal projection and normalization
+        x = self.transformer.dyt(self.transformer.fcl(x))
 
         if targets is not None:
             logits = self.lm_head(x) 
