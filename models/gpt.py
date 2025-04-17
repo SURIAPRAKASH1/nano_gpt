@@ -31,8 +31,8 @@ class GPT(nn.Module):
           wte = nn.Embedding(config.vocab_size, config.n_embd),
           pte = nn.Embedding(config.block_size, config.n_embd),
           h = nn.ModuleList([Block(config) for _ in range(config.n_layers)]) ,
-          fcl = nn.Linear(config.n_embd, config.n_embd)
-          dyt = DyT(GPTConfig)
+          fcl = nn.Linear(config.n_embd, config.n_embd),
+          dyt = DyT(GPTConfig),
         ))
         
 
