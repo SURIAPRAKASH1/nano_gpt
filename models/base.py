@@ -1,10 +1,10 @@
 import torch.nn as nn
 import torch
-from gpt import GPTConfig
 
 
-# Dynamic Tanh as normalizer
+# Dynamic Tanh as normalizer by default 
 class DyT(nn.Module):
+    "We insert Dynamic Tanh as normalizer as drop-in replacement for layer norm"
 
     def __init__(self, config):
         super(DyT, self).__init__()
@@ -13,7 +13,7 @@ class DyT(nn.Module):
         self.alpha = nn.Parameter(torch.ones(1) * config.alpha) 
         # scale and shift
         self.gamma = nn.Parameter(torch.ones(config.n_embd)) 
-        self.beta = nn.Parameter(torch.zeros(config.n_embd)) 
+        self.beta = nn.Parameter(torch.zeros(config.n_embd)) if config.bias else None
 
     def forward(self, x):
         x = torch.tanh( x * self.alpha ) 
@@ -33,15 +33,15 @@ class MultiHeadAttention(nn.Module):
         self.block_size = config.block_size
 
         # projection parameters for to generate q, k, v in batch level
-        self.attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias= config.bias) 
+        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias= config.bias) 
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias = config.bias) 
 
         # regularization (dropout)
         self.attn_dropout = nn.Dropout(config.dropout)
-        self.residual_dropout = nn.Dropout(config.dropout) 
+        self.resid_dropout = nn.Dropout(config.dropout) 
 
         # masking 
-        self.register_buffer('tril', torch.tril(
+        self.register_buffer('bias', torch.tril(
             torch.ones(config.block_size, config.block_size).view(1, 1, config.block_size, config.block_size)
         ))
 
@@ -56,9 +56,9 @@ class MultiHeadAttention(nn.Module):
 
         # attention scores and we scaling that so the current token will atten to all past token to get self attention
         # else current token don't attent to past tokens so it can't fully understand what's going on it's arround that
-        # but actually token going get attentions from left to right cause of sequence 
-        attn = q @ k.transpose(-1, -2) / (q.size(-1) **0.5)       # (B, n_head, T, hs) @ (B, n_head, hs, T) --> (B, n_head, T, T) 
-        # masking out right tokens so model can only predict next token by leanring past tokens only
+        # but (not arround) actually token going get attentions from left to right cause of sequence 😁
+        attn = (q @ k.transpose(-1, -2)) / (q.size(-1) **0.5)       # (B, n_head, T, hs) @ (B, n_head, hs, T) --> (B, n_head, T, T) 
+        # masking out right tokens so model can only predict next token by learning past tokens only
         attn = attn.masked_fill_(self.tril[:, :, :T, :T] == 0, float('-inf'))
         # attention weights
         attn = torch.softmax(attn , dim = -1) 
@@ -82,14 +82,16 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
 
         # here we have upward and downward projection parameters
-        self.fcl = nn.Linear(config.n_embd, 4* config.n_embd)
+        self.c_fc = nn.Linear(config.n_embd, 4* config.n_embd)
         self.act = nn.GELU() 
         self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd)
+        self.dropout = nn.Dropout(config.dropout)
     
     def forward(self, x):
-        x = self.fcl(x)
+        x = self.c_fc(x)
         x = self.act(x)
         x = self.c_proj(x) 
+        x = self.dropout(x) 
         return x 
     
 
@@ -98,24 +100,19 @@ class Block(nn.Module):
     def __init__(self, config):
         super(Block, self).__init__() 
 
+        # normalization layer
+        self.ln_1 = DyT(config) if config.DyT else nn.LayerNorm(config.n_embd, bias = config.bias) 
         # multihead attention layer
-        self.m_attn = MultiHeadAttention(config)
+        self.attn = MultiHeadAttention(config)
+        # normalization layer
+        self.ln_1 = DyT(config) if config.DyT else nn.LayerNorm(config.n_embd, bias= config.bias)
         # dense layer
         self.mlp = MLP(config) 
-        # dynamic tanh normalization
-        self.dyt = DyT(config) 
+        
     
     def forward(self, x):
-        x = x + self.m_attn(self.dyt(x))
-        x = x + self.mlp(self.dyt(x))
+        # here we normalize x before feeding to attention or mlp layer but in paper x is normalized after an attention and mlp
+        # cause in practice normalizing input before attention or mlp gives best results 
+        x = x + self.attn(self.ln_1(x))
+        x = x + self.mlp(self.ln_1(x))
         return x 
-    
-
-
-
-if __name__ == '__main__':
-    b = Block(GPTConfig)
-
-    x = torch.randn((GPTConfig.batch_size, GPTConfig.block_size, GPTConfig.n_embd))
-
-    print(b(x).shape, b)
