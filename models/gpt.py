@@ -10,13 +10,13 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 @dataclass
 class GPTConfig:
-    n_embd: int = 96                # just vector representation dim for each token in sequence (block)
-    block_size: int = 8             # how many tokens in one block ?
-    batch_size: int = 32            # how many blocks as group ?
-    n_head:int = 4                  # number of self attention (actually scaled dot product attention)
-    vocab_size = 100257             # all posible unique tokens
+    n_embd: int = 756                # just vector representation dim for each token in sequence (block)
+    block_size: int = 1024           # how many tokens in one block ?
+    batch_size: int = 32             # how many blocks as group ?
+    n_head:int = 12                  # number of self attention in paralell (actually scaled dot product attention)
+    vocab_size: int = 100257         # all posible unique tokens
     DyT: bool = False             
-    n_layer = 2
+    n_layer: int = 12
     dropout: float = 0.2
     bias: bool = True
     alpha: float = 0.5 
@@ -40,8 +40,12 @@ class GPT(nn.Module):
         ln_f = DyT(config) if config.DyT else nn.LayerNorm(config.n_embd, bias = config.bias)
     ))
 
-    # finall prediction layer
+    # finall prediction layer (we can call layer as output embedding matrix)
     self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias = False) 
+
+    # weight tying (sharing) . by tying input embedding matrix and output embedding matrix (just logits predictor before softmax)
+    # we can improve models performance and also it's reduce number of parameters used in our model 
+    self.transformer.wte.weight = self.lm_head.weight
 
     # initializing model weights
     self.apply(self._init_weights)
@@ -128,8 +132,9 @@ class GPT(nn.Module):
     sd = model.state_dict() 
     sd_keys = [k for k in sd.keys() if not k.endswith('.attn.bias')]        # no need to include masking
 
-    # pretrained gpt2 model state dict
-    model_hf = GPT2LMHeadModel.from_pretrained(model_type)
+    # pretrained gpt2 model state dict (optionally if we have locally downloaded weights we can use that without downloading again)
+    m_path = "./gpt2-local" if "./gpt2-local" else model_type
+    model_hf = GPT2LMHeadModel.from_pretrained(m_path)
     sd_hf = model_hf.state_dict()
 
     sd_keys_hf = sd_hf.keys()
@@ -141,6 +146,7 @@ class GPT(nn.Module):
     # so in order to copy trained gpt2's weights to our model we have change shape of the layer that they used cause
     # as default they use conv1x1 layer as projection paramters here we are using linear layer so we have just make sure
     # thier shape matches after all conv1x1 just a like normal feed forward operation
+
     assert len(sd_keys) == len(sd_keys_hf), f"mismatched keys : {len(sd_keys_hf) != len(sd_keys)}"
 
     for k in sd_keys_hf:
@@ -160,7 +166,6 @@ class GPT(nn.Module):
 
     return model
 
-
   def generate(self, idx, max_tokens, temperature =1.0):
     # idx (b, t) by takes previous sequence we try to complete the sequence so
     # every iteration we increase t size
@@ -174,7 +179,7 @@ class GPT(nn.Module):
         logits = logits[:, -1, :] / temperature
         # then apply softmax to get prob distripution for our vocab
         probs = torch.softmax(logits, dim = -1)
-        # we drawing next token in random sampling way so token with lowest will get a chance
+        # we drawing next token in random sampling way so even token with lowest prob will get a chance
         next_idx = torch.multinomial(probs, num_samples=1)
         # then add the next token to our token seq so next time model can predict token based on this token
         idx = torch.cat((idx, next_idx), dim=1)
@@ -184,5 +189,4 @@ class GPT(nn.Module):
 
 if __name__ == '__main__':
   gpt = GPT.from_pretrained('gpt2').to(device)
-#   gpt = GPT(GPTConfig).to(device) 
   print(gpt)

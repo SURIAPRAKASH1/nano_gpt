@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 
 
-# Dynamic Tanh as normalizer by default 
+# Dynamic Tanh drop-int replacement for layer norm 
 class DyT(nn.Module):
     "We insert Dynamic Tanh as normalizer as drop-in replacement for layer norm"
 
@@ -49,14 +49,14 @@ class MultiHeadAttention(nn.Module):
         B, T, C = x.shape             # (B, T, C) --> (batch_size, block_size, n_embd) 
         
         # q, k, v for each token in batch level and move the head dim towards to batch diem
-        q, k, v = self.attn(x).split(split_size = self.n_embd, dim = -1)   
+        q, k, v = self.attn(x).split(split_size = self.n_embd, dim = 2)   
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)   # (B, T, n_head, hs) -> (B, n_head, T, hs) 
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)   # (B, T, n_head, hs) -> (B, n_head, T, hs) 
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)   # (B, T, n_head, hs) -> (B, n_head, T, hs) 
 
         # attention scores and we scaling that so the current token will atten to all past token to get self attention
         # else current token don't attent to past tokens so it can't fully understand what's going on it's arround that
-        # but (not arround) actually token going get attentions from left to right cause of sequence 😁
+        # but (not arround) actually token will get attentions from left to right cause of sequence 😁
         attn = (q @ k.transpose(-1, -2)) / (q.size(-1) **0.5)       # (B, n_head, T, hs) @ (B, n_head, hs, T) --> (B, n_head, T, T) 
         # masking out right tokens so model can only predict next token by learning past tokens only
         attn = attn.masked_fill_(self.tril[:, :, :T, :T] == 0, float('-inf'))
@@ -105,7 +105,7 @@ class Block(nn.Module):
         # multihead attention layer
         self.attn = MultiHeadAttention(config)
         # normalization layer
-        self.ln_1 = DyT(config) if config.DyT else nn.LayerNorm(config.n_embd, bias= config.bias)
+        self.ln_2 = DyT(config) if config.DyT else nn.LayerNorm(config.n_embd, bias= config.bias)
         # dense layer
         self.mlp = MLP(config) 
         
@@ -114,5 +114,5 @@ class Block(nn.Module):
         # here we normalize x before feeding to attention or mlp layer but in paper x is normalized after an attention and mlp
         # cause in practice normalizing input before attention or mlp gives best results 
         x = x + self.attn(self.ln_1(x))
-        x = x + self.mlp(self.ln_1(x))
+        x = x + self.mlp(self.ln_2(x))
         return x 
