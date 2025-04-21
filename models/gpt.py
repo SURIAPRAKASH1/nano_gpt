@@ -2,24 +2,8 @@ import torch
 import torch.nn as nn 
 import torch.nn.functional as F 
 
-from dataclasses import dataclass
 from base import Block, DyT
-
-# current device
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-@dataclass
-class GPTConfig:
-    n_embd: int = 756                # just vector representation dim for each token in sequence (block)
-    block_size: int = 1024           # how many tokens in one block ?
-    batch_size: int = 32             # how many blocks as group ?
-    n_head:int = 12                  # number of self attention in paralell (actually scaled dot product attention)
-    vocab_size: int = 100257         # all posible unique tokens
-    DyT: bool = False             
-    n_layer: int = 12
-    dropout: float = 0.2
-    bias: bool = True
-    alpha: float = 0.5 
+from train import GPTConfig
 
 
 class GPT(nn.Module):

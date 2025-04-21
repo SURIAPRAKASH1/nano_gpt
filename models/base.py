@@ -4,7 +4,7 @@ import torch
 
 # Dynamic Tanh drop-int replacement for layer norm 
 class DyT(nn.Module):
-    "We insert Dynamic Tanh as normalizer as drop-in replacement for layer norm"
+    "We can insert Dynamic Tanh as normalizer as drop-in replacement for layer norm"
 
     def __init__(self, config):
         super(DyT, self).__init__()
@@ -76,7 +76,7 @@ class MultiHeadAttention(nn.Module):
 # MLP Layer
 class MLP(nn.Module):
 
-    "It's fully connected layers for doing upward and downward projection to ouput of Attention layer"
+    "It's fully connected layers for doing upward and downward projection applied to ouput of Attention layer"
 
     def __init__(self, config):
         super(MLP, self).__init__()
