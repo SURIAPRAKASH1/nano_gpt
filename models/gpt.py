@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn 
 import torch.nn.functional as F 
 
-from base import Block, DyT
-from train import GPTConfig
+from models.base import Block, DyT
+from models.train import GPTConfig
 
 
 class GPT(nn.Module):
