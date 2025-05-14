@@ -3,8 +3,6 @@ import torch.optim as optim
 from models.gpt import GPT
 import tiktoken
 
-import matplotlib.pyplot as plt 
-
 from dataclasses import dataclass
 import math
 from collections import defaultdict
