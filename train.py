@@ -20,26 +20,25 @@ text = eminem_text
 
 # we are using gpt-4 tokenizer it has vocab size of 100277 . 
 # so our text going to get encoding in tokens range of (0 - 100276)
-# so in gpt2 if we are going use pretrained gpt2 then we should better use gpt2 tokenizer 
-is_pretrained_model = True
-tokenizer =  tiktoken.get_encoding('gpt2') if is_pretrained_model else tiktoken.get_encoding('cl100k_base')
+# so in gpt2 if we are going to use pretrained gpt2 then we should better use gpt2 tokenizer 
+is_pretrained_model = True if input("pretrained model y/n: ") == 'y' else False
+tokenizer =  tiktoken.get_encoding('gpt2')
 tokens = tokenizer.encode(text)                     # we don't use any special tokens
 vocab_size = tokenizer.n_vocab
 
 print("vocab size", vocab_size)
 print(f"total number of charactors in our text is {len(text)} get tokenized into {len(tokens)} tokens")
 
-
 # gpt model hyperparameters 
 @dataclass
 class GPTConfig:
-    n_embd: int = 756                # just vector representation dim for each token in sequence (block)
-    block_size: int = 1024           # how many tokens in one block ?
+    n_embd: int = 128                # just vector representation dim for each token in sequence (block)
+    block_size: int = 16           # how many tokens in one block ?
     batch_size: int = 32             # how many blocks as group ?
-    n_head:int = 12                  # number of self attention in paralell (actually scaled dot product attention)
-    vocab_size: int = 100257         # all posible unique tokens 
+    n_head:int = 6                  # number of self attention in paralell (actually scaled dot product attention)
+    vocab_size: int = vocab_size         # all posible unique tokens 
     DyT: bool = False             
-    n_layer: int = 12
+    n_layer: int = 4
     dropout: float = 0.2
     bias: bool = True
     alpha: float = 0.5 
@@ -61,7 +60,6 @@ n = int(len(tokens) * 0.9)
 train_data = tokens[:n]         # 90% train data
 dev_data =  tokens[n:]          # 10% dev data
 print(f"train dataset tokens: {len(train_data)}\ndev dataset tokens {len(dev_data)}")
-
 
 
 # get batch of examples
@@ -184,18 +182,16 @@ def model_train(model):
 
 
 # so if we use pretrained weights then we should mention gpt2's size
-model = GPT(GPTConfig).from_pretrained('gt2') if is_pretrained_model else GPT(GPTConfig).to(device)
+model = GPT(GPTConfig).from_pretrained('gpt2') if is_pretrained_model else GPT(GPTConfig).to(device)
 
 # trian model if not pretrained 
-model = model if is_pretrained_model else model_train(model)
+trained_model = model if is_pretrained_model else model_train(model)
 
 # generate bars 
-def some_bars(query = """look """, max_tokens = 5):
-    model.eval()
-    # sampling from model
-    encoded_query = torch.tensor([tokenizer.encode(query)], device = device)
-    result = tokenizer.decode(model.generate(encoded_query, temperature= 0.8, max_tokens = max_tokens)[0].tolist())
-
-    print(result)
-
-# some_bars()
+query = """look """
+max_tokens = 5
+trained_model.eval()
+# sampling from model
+encoded_query = torch.tensor([tokenizer.encode(query)], device = device)
+result = tokenizer.decode(trained_model.generate(encoded_query, temperature= 0.8, max_tokens = max_tokens)[0].tolist())
+print(result)
